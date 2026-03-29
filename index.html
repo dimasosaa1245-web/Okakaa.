@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Оперативно Єціль LIVE</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root { --vh: 1vh; }
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100vh; height: calc(var(--vh) * 100);
+            background-color: #000;
+            font-family: 'Arial Black', Gadget, sans-serif;
+            color: white; overflow: hidden;
+        }
+
+        /* БЕГУЩАЯ СТРОКА */
+        #marquee-box {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 28px; background: rgba(0, 0, 0, 0.9);
+            border-bottom: 1px solid #440000; z-index: 10000;
+            display: none; align-items: center; overflow: hidden;
+        }
+        .marquee-text {
+            white-space: nowrap; position: absolute; color: #ff0000;
+            font-size: 13px; text-transform: uppercase; font-weight: bold;
+            animation: redBlink 1.5s infinite;
+        }
+        @keyframes marqueeMove {
+            0% { transform: translateX(100vw); }
+            100% { transform: translateX(-100%); }
+        }
+        @keyframes redBlink {
+            0%, 100% { opacity: 1; text-shadow: 0 0 8px #ff0000; }
+            50% { opacity: 0.5; }
+        }
+
+        /* КАРТА */
+        #map { width: 100%; height: 100%; opacity: 0; transition: 1.2s; background: #000; z-index: 1; }
+        body.settings-active #map { filter: blur(8px) brightness(0.4); }
+
+        /* ЛОАДЕР (ТВОЙ ОРИГИНАЛ) */
+        #loader-screen {
+            position: fixed; inset: 0; display: flex; justify-content: center; align-items: center;
+            flex-direction: column; z-index: 9999; background: #000; transition: 0.8s;
+        }
+        .logo-box {
+            display: flex; align-items: center; background: rgba(255, 255, 255, 0.03); 
+            padding: 10px 15px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 20px;
+        }
+        .radar-container { position: relative; width: 40px; height: 40px; margin-right: 12px; }
+        .radar-svg { width: 100%; height: 100%; animation: rotateRadar 4s linear infinite; }
+        .target { position: absolute; width: 4px; height: 4px; background: #ff0000; border-radius: 50%; opacity: 0; animation: blink 2s infinite; }
+        .t1 { top: 10px; left: 25px; } .t2 { bottom: 10px; left: 10px; animation-delay: 1s; }
+        @keyframes rotateRadar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes blink { 50% { opacity: 1; } }
+
+        .text-ua {
+            font-size: 20px; text-transform: uppercase;
+            background: linear-gradient(to bottom, #0057B7 50%, #FFD700 50%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .live-tag { font-size: 9px; color: #ff0000; display: flex; align-items: center; gap: 4px; font-weight: bold; }
+        .live-dot { width: 6px; height: 6px; background: #ff0000; border-radius: 50%; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
+        .loader-wrapper { width: 180px; height: 2px; background: #1a1a1a; }
+        .loader-fill { width: 0%; height: 100%; background: #FFD700; animation: loadProgress 4.2s forwards; }
+        @keyframes loadProgress { 100% { width: 100%; } }
+
+        /* КНОПКИ */
+        .side-btn { 
+            position: fixed; top: 40px; width: 45px; height: 45px; background: #111; 
+            border: 1px solid #333; border-radius: 50%; z-index: 2000; 
+            display: none; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .loaded .side-btn { display: flex; }
+        #telegram-btn { left: 15px; }
+        #settings-btn { right: 15px; }
+        .side-btn svg { width: 22px; height: 22px; fill: white; }
+
+        /* МЕНЮ ТЕЛЕГРАМ */
+        #tg-menu { 
+            position: fixed; top: 95px; left: 15px; background: rgba(15,15,15,0.98); 
+            border: 1px solid #333; z-index: 2005; padding: 15px; display: none; border-radius: 12px; width: 220px; 
+        }
+        .tg-link { color: white; text-decoration: none; display: block; padding: 10px; border-bottom: 1px solid #222; font-size: 14px; }
+
+        /* ОКНО НАСТРОЕК */
+        #settings-window {
+            position: fixed; inset: 0; background: #000; z-index: 5000;
+            display: flex; flex-direction: column; transform: translateY(100%);
+            transition: 0.4s; padding: 30px 20px;
+        }
+        #settings-window.active { transform: translateY(0); }
+        .win-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 15px; }
+        .close-win-btn { background: #222; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; color: white; }
+
+        /* ТАБЫ И ПЕРЕКЛЮЧАТЕЛИ */
+        .tabs-nav { display: flex; gap: 20px; margin: 20px 0; border-bottom: 1px solid #111; }
+        .tab-trigger { background: none; border: none; color: #555; padding-bottom: 10px; font-weight: bold; cursor: pointer; }
+        .tab-trigger.active { color: #FFD700; border-bottom: 2px solid #FFD700; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+        .switch-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; color: #ccc; }
+        .switch { position: relative; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; inset: 0; background: #333; border-radius: 20px; cursor: pointer; transition: 0.3s; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        input:checked + .slider { background: #ff0000; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .loaded #map { opacity: 1; }
+        .loaded #loader-screen { opacity: 0; visibility: hidden; }
+    </style>
+</head>
+<body>
+
+    <div id="marquee-box">
+        <div id="marquee-text" class="marquee-text">Увага, можлива масована атака сьогодні вночі.</div>
+    </div>
+
+    <div id="loader-screen">
+        <div class="logo-box">
+            <div class="radar-container">
+                <div class="target t1"></div><div class="target t2"></div>
+                <svg class="radar-svg" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                    <path d="M 50,5 A 45,45 0 0,1 95,50" fill="none" stroke="white" stroke-width="4" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div>
+                <div class="text-ua">Оперативно Єціль</div>
+                <div class="live-tag"><div class="live-dot"></div> LIVE SYSTEM</div>
+            </div>
+        </div>
+        <div class="loader-wrapper"><div class="loader-fill"></div></div>
+    </div>
+
+    <div id="telegram-btn" class="side-btn"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.52-1.4.51-.46-.01-1.35-.26-2.01-.48-.81-.27-1.45-.42-1.39-.88.03-.24.36-.49.99-.75 3.88-1.69 6.47-2.8 7.78-3.32 3.71-1.47 4.48-1.73 4.99-1.74.11 0 .37.03.53.16.14.11.18.26.2.43.02.1-.01.3-.02.4z"/></svg></div>
+    <div id="settings-btn" class="side-btn"><svg viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.97 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.97 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg></div>
+
+    <div id="tg-menu">
+        <a href="https://t.me/monitor_bacy" target="_blank" class="tg-link">Бульдоги UA</a>
+        <a href="https://t.me/zp_monitor" target="_blank" class="tg-link">Єціль Запоріжжя</a>
+    </div>
+
+    <div id="settings-window">
+        <div class="win-header">
+            <h3>Налаштування</h3>
+            <button id="close-settings" class="close-win-btn">✕</button>
+        </div>
+        <div class="tabs-nav">
+            <button class="tab-trigger active" data-tab="tab-map">Мапа</button>
+            <button class="tab-trigger" data-tab="tab-obj">Об'єкти</button>
+        </div>
+        <div id="tab-map" class="tab-pane active">
+            <div class="switch-row"><span>Тактична (Чорна)</span><label class="switch"><input type="checkbox" id="theme-sw" checked><span class="slider"></span></label></div>
+            <div class="switch-row"><span>Лінія фронту</span><label class="switch"><input type="checkbox" id="ds-sw" checked><span class="slider"></span></label></div>
+            <div class="switch-row"><span>Межі областей</span><label class="switch"><input type="checkbox" id="mista-sw" checked><span class="slider"></span></label></div>
+        </div>
+        <div id="tab-obj" class="tab-pane">Немає доступних об'єктів</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+        window.addEventListener('resize', setVh); setVh();
+
+        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([48.37, 31.16], 6);
+        
+        const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+        const light = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        dark.addTo(map);
+
+        let dsL, mistaL;
+
+        // ЗАГРУЗКА ОБВОДКИ И ФРОНТА (DeepState.geojson и mista.geojson)
+        fetch('deepstate.geojson').then(r => r.json()).then(data => {
+            dsL = L.geoJSON(data, { style: { stroke: false, fillColor: "#f00", fillOpacity: 0.25 } }).addTo(map);
+        }).catch(() => console.log('DS file missing'));
+
+        fetch('mista.geojson').then(r => r.json()).then(data => {
+            mistaL = L.geoJSON(data, { style: { color: "#ff0000", weight: 2, fillOpacity: 0 } }).addTo(map);
+        }).catch(() => console.log('Mista file missing'));
+
+        window.onload = () => { setTimeout(() => {
+            document.body.classList.add('loaded');
+            initMarquee();
+        }, 4200); };
+
+        // КНОПКИ И МЕНЮ
+        const tgBtn = document.getElementById('telegram-btn'), tgMenu = document.getElementById('tg-menu');
+        tgBtn.onclick = (e) => { e.stopPropagation(); tgMenu.style.display = tgMenu.style.display === 'block' ? 'none' : 'block'; };
+        document.onclick = () => tgMenu.style.display = 'none';
+
+        const setBtn = document.getElementById('settings-btn'), setWin = document.getElementById('settings-window');
+        setBtn.onclick = () => { setWin.classList.add('active'); document.body.classList.add('settings-active'); };
+        document.getElementById('close-settings').onclick = () => { setWin.classList.remove('active'); document.body.classList.remove('settings-active'); };
+
+        // ПЕРЕКЛЮЧАТЕЛИ В НАСТРОЙКАХ
+        document.getElementById('theme-sw').onchange = (e) => { e.target.checked ? (map.removeLayer(light), dark.addTo(map)) : (map.removeLayer(dark), light.addTo(map)); };
+        document.getElementById('ds-sw').onchange = (e) => { if(dsL) e.target.checked ? dsL.addTo(map) : map.removeLayer(dsL); };
+        document.getElementById('mista-sw').onchange = (e) => { if(mistaL) e.target.checked ? mistaL.addTo(map) : map.removeLayer(mistaL); };
+
+        // ТАБЫ
+        document.querySelectorAll('.tab-trigger').forEach(t => {
+            t.onclick = () => {
+                document.querySelectorAll('.tab-trigger, .tab-pane').forEach(el => el.classList.remove('active'));
+                t.classList.add('active'); document.getElementById(t.dataset.tab).classList.add('active');
+            };
+        });
+
+        // БЕГУЩАЯ СТРОКА
+        function initMarquee() {
+            const box = document.getElementById('marquee-box'), txt = document.getElementById('marquee-text');
+            function run() {
+                box.style.display = 'flex';
+                txt.style.animation = 'marqueeMove 12s linear forwards, redBlink 1.5s infinite';
+                setTimeout(() => { box.style.display = 'none'; txt.style.animation = 'none'; }, 13000);
+            }
+            run(); setInterval(run, 300000);
+        }
+    </script>
+</body>
+</html>
+
